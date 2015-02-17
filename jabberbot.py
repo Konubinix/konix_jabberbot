@@ -57,8 +57,9 @@ __license__ = 'GNU General Public License version 3 or later'
 def botcmd(*args, **kwargs):
     """Decorator for bot command functions"""
 
-    def decorate(func, hidden=False, name=None, thread=False):
+    def decorate(func, regexp=None, hidden=False, name=None, thread=False):
         setattr(func, '_jabberbot_command', True)
+        setattr(func, '_jabberbot_regexp', regexp)
         setattr(func, '_jabberbot_command_hidden', hidden)
         setattr(func, '_jabberbot_command_name', name or func.__name__)
         setattr(func, '_jabberbot_command_thread', thread)  # Experimental!
@@ -68,7 +69,6 @@ def botcmd(*args, **kwargs):
         return decorate(args[0], **kwargs)
     else:
         return lambda func: decorate(func, **kwargs)
-
 
 class JabberBot(object):
     # Show types for presence
@@ -153,12 +153,19 @@ class JabberBot(object):
 
         # Collect commands from source
         self.commands = {}
+        self.regexp_commands = []
         for name, value in inspect.getmembers(self, inspect.ismethod):
             if getattr(value, '_jabberbot_command', False):
                 name = getattr(value, '_jabberbot_command_name')
                 self.log.info('Registered command: %s' % name)
                 self.commands[self.__command_prefix + name] = value
-
+                if getattr(value, '_jabberbot_regexp', False):
+                    self.log.info(
+                        'Associate command {} to regexp: {}'.format(
+                            name, getattr(value, '_jabberbot_regexp')))
+                    self.regexp_commands.append(
+                        (getattr(value, '_jabberbot_regexp'), value)
+                    )
         self.roster = None
 
 ################################
@@ -648,24 +655,35 @@ class JabberBot(object):
             command, args = text, ''
         cmd = command.lower()
         self.log.debug("*** cmd = %s" % cmd)
+        regexp_matching_functions = [
+            regexp_command[1]
+            for regexp_command in self.regexp_commands
+            if re.match(regexp_command[0], text)
+        ]
 
-        if cmd in self.commands:
+        def perform_action(function):
             def execute_and_send():
                 try:
-                    reply = self.commands[cmd](mess, args)
+                    reply = function(mess, args)
                 except Exception, e:
                     self.log.exception('An error happened while processing '\
-                        'a message ("%s") from %s: %s"' %
-                        (text, jid, traceback.format_exc(e)))
+                                       'a message ("%s") from %s: %s"' %
+                                       (text, jid, traceback.format_exc(e)))
                     reply = self.MSG_ERROR_OCCURRED
                 if reply:
                     self.send_simple_reply(mess, reply)
-            # Experimental!
-            # if command should be executed in a seperate thread do it
-            if self.commands[cmd]._jabberbot_command_thread:
+            if function._jabberbot_command_thread:
                 thread.start_new_thread(execute_and_send, ())
             else:
                 execute_and_send()
+
+        if cmd in self.commands:
+            # Experimental!
+            # if command should be executed in a seperate thread do it
+            perform_action(self.commands[cmd])
+        elif regexp_matching_functions:
+            for function in regexp_matching_functions:
+                perform_action(function)
         else:
             # In private chat, it's okay for the bot to always respond.
             # In group chat, the bot should silently ignore commands it
