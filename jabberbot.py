@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import thread
+import string
 
 try:
     import xmpp
@@ -57,10 +58,10 @@ __license__ = 'GNU General Public License version 3 or later'
 def botcmd(*args, **kwargs):
     """Decorator for bot command functions"""
 
-    def decorate(func, regexp=None, regexp_lower=True, hidden=False, name=None, thread=False):
+    def decorate(func, regexp=None, regexp_text_transform=string.lower, hidden=False, name=None, thread=False):
         setattr(func, '_jabberbot_command', True)
         setattr(func, '_jabberbot_regexp', regexp)
-        setattr(func, '_jabberbot_regexp_lower', regexp_lower)
+        setattr(func, '_jabberbot_regexp_text_transform', regexp_text_transform)
         setattr(func, '_jabberbot_command_hidden', hidden)
         setattr(func, '_jabberbot_command_name', name or func.__name__)
         setattr(func, '_jabberbot_command_thread', thread)  # Experimental!
@@ -656,13 +657,12 @@ class JabberBot(object):
             command, args = text, ''
         cmd = command.lower()
         self.log.debug("*** cmd = %s" % cmd)
-        textlower = text.lower()
         regexp_matching_functions = [
             regexp_command[1]
             for regexp_command in self.regexp_commands
             if re.match(regexp_command[0],
-                        text if not regexp_command[1]._jabberbot_regexp_lower
-                        else textlower)
+                        text if not regexp_command[1]._jabberbot_regexp_text_transform
+                        else regexp_command[1]._jabberbot_regexp_text_transform(text))
         ]
 
         def perform_action(function):
