@@ -658,14 +658,20 @@ class JabberBot(object):
         cmd = command.lower()
         self.log.debug("*** cmd = %s" % cmd)
         regexp_matching_functions = [
-            regexp_command[1]
+            (re.match(regexp_command[0],
+                     text if not regexp_command[1]._jabberbot_regexp_text_transform
+                     else
+            regexp_command[1]._jabberbot_regexp_text_transform(text)),
+            regexp_command[1])
             for regexp_command in self.regexp_commands
-            if re.match(regexp_command[0],
-                        text if not regexp_command[1]._jabberbot_regexp_text_transform
-                        else regexp_command[1]._jabberbot_regexp_text_transform(text))
+        ]
+        regexp_matching_functions = [
+            regexp_matching_function
+            for regexp_matching_function in regexp_matching_functions
+            if regexp_matching_function[0]
         ]
 
-        def perform_action(function):
+        def perform_action(function, args):
             def execute_and_send():
                 try:
                     reply = function(mess, args)
@@ -684,10 +690,10 @@ class JabberBot(object):
         if cmd in self.commands:
             # Experimental!
             # if command should be executed in a seperate thread do it
-            perform_action(self.commands[cmd])
+            perform_action(self.commands[cmd], args)
         elif regexp_matching_functions:
-            for function in regexp_matching_functions:
-                perform_action(function)
+            for match, function in regexp_matching_functions:
+                perform_action(function, match)
         else:
             # In private chat, it's okay for the bot to always respond.
             # In group chat, the bot should silently ignore commands it
