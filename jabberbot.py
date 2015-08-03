@@ -671,10 +671,11 @@ class JabberBot(object):
             if regexp_matching_function[0]
         ]
 
-        def perform_action(function, args):
+        def perform_action(function, args, match=None):
             def execute_and_send():
                 try:
-                    reply = function(mess, args)
+                    reply = function(mess, args, match=match) if match \
+                            else function(mess, args)
                 except Exception, e:
                     self.log.exception('An error happened while processing '\
                                        'a message ("%s") from %s: %s"' %
@@ -693,7 +694,7 @@ class JabberBot(object):
             perform_action(self.commands[cmd], args)
         elif regexp_matching_functions:
             for match, function in regexp_matching_functions:
-                perform_action(function, match)
+                perform_action(function, args, match=match)
         else:
             # In private chat, it's okay for the bot to always respond.
             # In group chat, the bot should silently ignore commands it
